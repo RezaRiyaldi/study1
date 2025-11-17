@@ -10,6 +10,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
+	Name         string
+	Version      string
 	Port         string
 	Environtment string
 }
@@ -25,6 +27,8 @@ type DatabaseConfig struct {
 func LoadConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
+			Name:         getEnv("APP_NAME", "Study1"),
+			Version:      getEnv("APP_VERSION", "1.0.0"),
 			Port:         getEnv("SERVER_PORT", "8080"),
 			Environtment: getEnv("SERVER_ENV", "development"),
 		},

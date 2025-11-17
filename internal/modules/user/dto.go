@@ -3,6 +3,7 @@ package user
 import "time"
 
 // CreateUserRequest represents the data required to create a new user.
+// @Description Payload to create a new user
 type CreateUserRequest struct {
 	Name  string `json:"name" binding:"required"`
 	Email string `json:"email" binding:"required,email"`
@@ -10,6 +11,7 @@ type CreateUserRequest struct {
 }
 
 // UpdateUserRequest represents the data required to update an existing user.
+// @Description Payload to update an existing user
 type UpdateUserRequest struct {
 	Name  string `json:"name"`
 	Email string `json:"email" binding:"omitempty,email"`
@@ -17,6 +19,7 @@ type UpdateUserRequest struct {
 }
 
 // UserResponse represents the user data returned in API responses.
+// @Description User data returned by the API
 type UserResponse struct {
 	ID        uint      `json:"id"`
 	Name      string    `json:"name"`

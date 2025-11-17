@@ -14,20 +14,17 @@ type App struct {
 }
 
 func New(cfg *config.Config) (*App, error) {
-	// Initialize the database connection
 	db, err := database.NewDB(cfg.Database)
-
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize the HTTP server
-	server := http.NewServer(cfg)
-
-	// TODO: Initilize Modules
+	// Initialize modules
 	userModule := user.NewUserModule(db)
+	// otherModule := other.NewOtherModule(db)
 
-	userModule.Handler.RegisterRoutes(server.GetRouter().Group("/api/v1"))
+	// Pass semua modules ke server
+	server := http.NewServer(cfg, userModule) //, otherModule, anotherModule)
 
 	return &App{
 		config: cfg,

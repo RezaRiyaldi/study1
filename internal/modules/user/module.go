@@ -1,6 +1,10 @@
 package user
 
-import "study1/internal/core/database"
+import (
+	"study1/internal/core/database"
+
+	"github.com/gin-gonic/gin"
+)
 
 type UserModule struct {
 	Repository UserRepository
@@ -18,4 +22,9 @@ func NewUserModule(db *database.DB) *UserModule {
 		Service:    service,
 		Handler:    handler,
 	}
+}
+
+// Di user/module.go
+func (m *UserModule) RegisterRoutes(router *gin.RouterGroup) {
+	m.Handler.RegisterRoutes(router)
 }

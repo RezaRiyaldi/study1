@@ -28,42 +28,55 @@ migrate-refresh:
 migrate-fresh:
 	@go run cmd/migrate/main.go fresh
 
-clean:
-	@rm -rf bin/
-
-dev:
-	@if command -v air > /dev/null; then \
-		air; \
-	else \
-		echo "Air not installed. Installing..."; \
-		go install github.com/cosmtrek/air@latest; \
-		air; \
-	fi
-
-deps:
-	@go mod download
-	@go mod tidy
-
 # Documentation commands
 docs:
 	@go run cmd/docs/generate.go
 
-docs-serve:
-	@echo "📚 Serving documentation at http://localhost:8081"
-	@python3 -m http.server 8081 -d docs/ || echo "Python not available, install python to serve docs"
-
-# Full setup including docs
-setup: deps migrate-generate migrate-up docs
-	@echo "✅ Setup completed: Dependencies, migrations, and documentation generated"
-
-	
 godoc:
-	@echo "📚 Generating Go documentation..."
-	@go doc -all ./...
+	@echo "📚 View Go documentation in terminal:"
+	@go doc ./internal/modules/user
 
+# Godoc serve dengan path lengkap untuk Windows
 godoc-serve:
 	@echo "🌐 Starting GoDoc server at http://localhost:6060"
 	@echo "Open http://localhost:6060/pkg/study1/ in your browser"
-	@godoc -http=:6060
+	"$(shell go env GOPATH)/bin/godoc" -http=:6060
 
-doc: docs godoc
+doc: docs
+
+clean:
+	@rm -rf bin/
+
+# Development with air (fixed)
+dev:
+	@if command -v air > /dev/null; then \
+		air; \
+	else \
+		echo "Air not installed. Installing correct version..."; \
+		go install github.com/air-verse/air@latest; \
+		$$(go env GOPATH)/bin/air; \
+	fi
+
+# Windows compatible dev
+dev-win:
+	@echo "🚀 Starting development server for Windows..."
+	@while true; do \
+		echo "Building..."; \
+		go build -o bin/dev-api.exe cmd/api/main.go; \
+		if [ $$? -eq 0 ]; then \
+			echo "Starting server..."; \
+			./bin/dev-api.exe & \
+			PID=$$!; \
+			echo "Waiting for file changes..."; \
+			timeout /t 5 > nul; \
+			taskkill /PID $$PID /F > nul 2>&1; \
+			echo "Changes detected, restarting..."; \
+		else \
+			echo "Build failed, waiting for changes..."; \
+			timeout /t 5 > nul; \
+		fi; \
+	done
+
+deps:
+	@go mod download
+	@go mod tidy

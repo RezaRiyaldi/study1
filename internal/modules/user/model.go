@@ -8,6 +8,7 @@ import (
 
 // User represents a user entity in the system.
 // This model is used for database operations and API responses.
+// @Description User model stored in DB and used in responses
 type User struct {
 	ID        uint           `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	Name      string         `gorm:"size:100;not null;column:name" json:"name" searchable:"true"`
