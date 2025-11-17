@@ -18,7 +18,7 @@ go 1.25.4
 //   make docs     # Generate API documentation
 //   make godoc    # View Go documentation
 //
-// Repository: https://github.com/your-username/study1
+// Repository: https://github.com/RezaRiyaldi/study1
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
