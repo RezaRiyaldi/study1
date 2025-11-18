@@ -11,6 +11,7 @@ import (
 	"study1/internal/core/config"
 	"study1/internal/core/database"
 	"study1/internal/core/database/migrations"
+	"study1/internal/modules/activity"
 	"study1/internal/modules/user"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -20,6 +21,7 @@ import (
 func generateMigrations(db *gorm.DB) {
 	// Define models to generate migrations for
 	models := []interface{}{
+		&activity.ActivityLog{},
 		&user.User{},
 		// Add more models here as needed
 	}

@@ -45,6 +45,105 @@ const docTemplate = `{
                 }
             }
         },
+        "/activity-logs": {
+            "get": {
+                "description": "Retrieve paginated activity logs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "activity"
+                ],
+                "summary": "List activity logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search term",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/activity-logs/{uuid}": {
+            "get": {
+                "description": "Get activity log by UUID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "activity"
+                ],
+                "summary": "Get an activity log",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Activity Log UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/study1_internal_core_types.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Check API health status",
@@ -188,9 +287,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/users/{id}": {
+        "/users/{uuid}": {
             "get": {
-                "description": "Get user by ID",
+                "description": "Get user by UUID",
                 "consumes": [
                     "application/json"
                 ],
@@ -203,9 +302,9 @@ const docTemplate = `{
                 "summary": "Get a user",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "User ID",
-                        "name": "id",
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -232,7 +331,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update user by ID",
+                "description": "Update user by UUID",
                 "consumes": [
                     "application/json"
                 ],
@@ -245,9 +344,9 @@ const docTemplate = `{
                 "summary": "Update a user",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "User ID",
-                        "name": "id",
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
@@ -283,7 +382,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete user by ID",
+                "description": "Delete user by UUID",
                 "consumes": [
                     "application/json"
                 ],
@@ -296,9 +395,9 @@ const docTemplate = `{
                 "summary": "Delete a user",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "User ID",
-                        "name": "id",
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -350,6 +449,9 @@ const docTemplate = `{
         "internal_modules_user.UpdateUserRequest": {
             "description": "Payload to update an existing user",
             "type": "object",
+            "required": [
+                "uuid"
+            ],
             "properties": {
                 "age": {
                     "type": "integer",
@@ -359,6 +461,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

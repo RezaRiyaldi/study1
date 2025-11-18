@@ -9,7 +9,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	"unicode"
 
 	"gorm.io/gorm"
 )
@@ -49,12 +48,21 @@ func (g *MigrationGenerator) GenerateFromModels(models ...interface{}) error {
 			return fmt.Errorf("failed to generate SQL for %s: %w", tableName, err)
 		}
 
-		// Create migration file
-		if err := g.createMigrationFile(migrationName, upSQL, downSQL); err != nil {
+		// Create migration file and register migration in memory
+		version, err := g.createMigrationFile(migrationName, upSQL, downSQL)
+		if err != nil {
 			return fmt.Errorf("failed to create migration file for %s: %w", tableName, err)
 		}
 
-		log.Printf("✅ Generated migration for table: %s", tableName)
+		// Register migration in runtime registry so it can be applied immediately
+		RegisterMigration(&Migration{
+			Version: version,
+			Name:    migrationName,
+			Up:      upSQL,
+			Down:    downSQL,
+		})
+
+		log.Printf("✅ Generated migration for table: %s (version=%s)", tableName, version)
 	}
 
 	return nil
@@ -71,8 +79,18 @@ func (g *MigrationGenerator) GenerateForModel(model interface{}) error {
 		return err
 	}
 
-	// Create migration file
-	return g.createMigrationFile(migrationName, upSQL, downSQL)
+	// Create migration file and register
+	version, err := g.createMigrationFile(migrationName, upSQL, downSQL)
+	if err != nil {
+		return err
+	}
+	RegisterMigration(&Migration{
+		Version: version,
+		Name:    migrationName,
+		Up:      upSQL,
+		Down:    downSQL,
+	})
+	return nil
 }
 
 // Generate SQL for creating table
@@ -89,14 +107,14 @@ func (g *MigrationGenerator) generateTableSQL(model interface{}) (upSQL, downSQL
 	var columns []string
 	var primaryKeys []string
 
-	// Get model type
+	// Get model type and collect all exported fields, including embedded ones
 	t := reflect.TypeOf(model)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
+	fields := collectFields(t)
+	for _, field := range fields {
 		columnSQL := g.generateColumnSQL(field, stmt)
 		if columnSQL != "" {
 			columns = append(columns, columnSQL)
@@ -112,7 +130,7 @@ func (g *MigrationGenerator) generateTableSQL(model interface{}) (upSQL, downSQL
 	}
 
 	// Build final SQL
-	createSQL := fmt.Sprintf("CREATE TABLE %s (\n  %s", tableName, strings.Join(columns, ",\n  "))
+	createSQL := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n  %s", tableName, strings.Join(columns, ",\n  "))
 
 	if len(primaryKeys) > 0 {
 		createSQL += fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(primaryKeys, ", "))
@@ -203,13 +221,9 @@ func (g *MigrationGenerator) getColumnName(field reflect.StructField, stmt *gorm
 		}
 	}
 
-	// Fallback to field name in snake_case
 	name := field.Name
-	// Handle common abbreviations
-	if name == "ID" {
-		return "id"
-	}
-	return g.toSnakeCase(name)
+
+	return toSnakeCase(name)
 }
 
 // Map Go type to SQL type
@@ -268,13 +282,28 @@ func (g *MigrationGenerator) mapGoTypeToSQL(fieldType reflect.Type, gormTag stri
 		return "DOUBLE"
 
 	case reflect.Struct:
+		// time.Time -> DATETIME
 		if fieldType.String() == "time.Time" {
 			return "DATETIME"
 		}
-	case reflect.Ptr:
-		// Handle pointer types (for soft delete)
-		if fieldType.String() == "*time.Time" {
+		// gorm.DeletedAt type should be mapped to DATETIME so it can be indexed
+		// (gorm.DeletedAt is a struct type in the gorm package)
+		if strings.HasSuffix(fieldType.String(), ".DeletedAt") || fieldType.String() == "gorm.DeletedAt" {
 			return "DATETIME"
+		}
+	case reflect.Ptr:
+		// Handle pointer types: map common pointer-to-primitive types to SQL
+		// (e.g. *uint -> INT, *int64 -> BIGINT, *time.Time -> DATETIME).
+		elem := fieldType.Elem()
+		switch elem.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+			return "INT"
+		case reflect.Int64, reflect.Uint64:
+			return "BIGINT"
+		case reflect.Struct:
+			if elem.String() == "time.Time" {
+				return "DATETIME"
+			}
 		}
 	}
 
@@ -372,10 +401,10 @@ func (g *MigrationGenerator) migrationExists(migrationName string) bool {
 }
 
 // Create migration file
-func (g *MigrationGenerator) createMigrationFile(migrationName, upSQL, downSQL string) error {
+func (g *MigrationGenerator) createMigrationFile(migrationName, upSQL, downSQL string) (string, error) {
 	version := time.Now().Format("20060102150405")
 	filename := fmt.Sprintf("%s_%s.go", version, migrationName)
-	filepath := filepath.Join(g.migrationsDir, filename)
+	filePath := filepath.Join(g.migrationsDir, filename)
 
 	// Create migration file template
 	tmpl := `package migrations
@@ -406,28 +435,59 @@ func init() {
 		DownSQL: downSQL,
 	}
 
-	file, err := os.Create(filepath)
+	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer file.Close()
 
 	template := template.Must(template.New("migration").Parse(tmpl))
-	return template.Execute(file, data)
+	if err := template.Execute(file, data); err != nil {
+		return "", err
+	}
+
+	// Also write plain SQL files so runtime can apply migrations even if
+	// generated Go files are not compiled into the running binary.
+	upPath := filepath.Join(g.migrationsDir, fmt.Sprintf("%s_%s.up.sql", version, migrationName))
+	downPath := filepath.Join(g.migrationsDir, fmt.Sprintf("%s_%s.down.sql", version, migrationName))
+
+	if err := os.WriteFile(upPath, []byte(upSQL), 0644); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(downPath, []byte(downSQL), 0644); err != nil {
+		return "", err
+	}
+
+	return version, nil
 }
 
-// toSnakeCase mengubah string CamelCase menjadi snake_case
-func (g *MigrationGenerator) toSnakeCase(s string) string {
-	var result []rune
-	for i, r := range s {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				result = append(result, '_')
-			}
-			result = append(result, unicode.ToLower(r))
-		} else {
-			result = append(result, r)
-		}
+// collectFields returns all exported struct fields for the provided type,
+// recursively descending into anonymous (embedded) struct fields so that
+// embedded fields are presented as a flat list. Unexported fields are skipped.
+func collectFields(t reflect.Type) []reflect.StructField {
+	var out []reflect.StructField
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
 	}
-	return string(result)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		// skip unexported
+		if f.PkgPath != "" {
+			continue
+		}
+		if f.Anonymous {
+			// embedded struct -> recurse
+			ft := f.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				inner := collectFields(ft)
+				out = append(out, inner...)
+				continue
+			}
+		}
+		out = append(out, f)
+	}
+	return out
 }

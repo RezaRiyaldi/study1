@@ -1,10 +1,15 @@
 package migrations
 
 import (
+	"log"
+	"os"
+	"path/filepath"
 	"reflect"
-	"time"
+	"sort"
+	"strings"
 
 	"study1/internal/core/database"
+	"study1/internal/modules/activity"
 	"study1/internal/modules/user"
 
 	"gorm.io/gorm"
@@ -56,10 +61,15 @@ func (m *Migration) RunAll() error {
 	// List all models to migrate
 	models := []interface{}{
 		&user.User{},
+		&activity.ActivityLog{},
 		// Add more models here as you create them
 	}
-	// Migrate only models that don't have tables yet and record per-model migration.
-	migratedAny := false
+
+	// Generate migrations for models that don't have tables yet.
+	migrationsDir := "internal/core/database/migrations/generated"
+	generator := database.NewMigrationGenerator(m.DB, migrationsDir)
+
+	generatedAny := false
 	for _, model := range models {
 		tableName := tableNameOf(model)
 		if migrator.TableExists(model) {
@@ -67,23 +77,110 @@ func (m *Migration) RunAll() error {
 			continue
 		}
 
-		// Migrate this single model
-		if err := migrator.AutoMigrate(model); err != nil {
-			return err
+		migrationName := "create_" + tableName + "_table"
+		// Check if migration file already exists in migrations directory
+		pattern := filepath.Join(migrationsDir, "*_"+migrationName+".go")
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			log.Printf("⚠️  Migration file for %s already exists, skipping generation", tableName)
+			continue
 		}
 
-		// Record migration for this model
-		version := time.Now().Format("20060102150405")
-		name := "migrate_" + tableName
-		if err := migrator.RecordMigration(version, name); err != nil {
+		if err := generator.GenerateForModel(model); err != nil {
 			return err
 		}
-		migratedAny = true
+		generatedAny = true
 	}
 
-	if !migratedAny {
-		// nothing to do
+	// Apply any SQL files found in the generated migrations directory.
+	// This covers the case when migration .go files exist on disk but are not
+	// compiled into the running binary (so their init() didn't register them).
+	if err := m.applySQLMigrationsFromDir(migrationsDir); err != nil {
+		return err
+	}
+
+	// Apply any migrations registered in-memory (including those generated in this run).
+	if err := m.ApplyRegistered(); err != nil {
+		return err
+	}
+
+	if !generatedAny {
+		// nothing newly generated; ApplyRegistered already ensured any pending registered migrations were applied
 		return nil
+	}
+
+	return nil
+}
+
+// applySQLMigrationsFromDir scans the given directory for *.up.sql files and
+// applies any that have not been recorded yet. Files are applied in filename
+// order (which includes timestamp prefix), and after successful execution the
+// migration is recorded.
+func (m *Migration) applySQLMigrationsFromDir(dir string) error {
+	pattern := filepath.Join(dir, "*.up.sql")
+	matches, _ := filepath.Glob(pattern)
+	if len(matches) == 0 {
+		log.Printf("No .up.sql files found in %s", dir)
+		return nil
+	}
+
+	sort.Strings(matches)
+	migrator := database.NewMigrator(m.DB)
+
+	log.Printf("Found %d .up.sql files in %s", len(matches), dir)
+	for _, p := range matches {
+		base := filepath.Base(p)
+		parts := strings.SplitN(base, "_", 2)
+		if len(parts) < 2 {
+			log.Printf("Skipping file with unexpected name: %s", base)
+			continue
+		}
+		version := parts[0]
+		name := strings.TrimSuffix(parts[1], ".up.sql")
+
+		// Check whether this exact file has already been applied. We include the
+		// filename in the migration record to avoid collisions when multiple
+		// migrations are generated in the same second (same version).
+		applied, err := migrator.HasMigrationRecordWithFile(version, name, base)
+		if err != nil {
+			return err
+		}
+		if applied {
+			log.Printf("Skipping already-applied migration file: %s", base)
+			continue
+		}
+
+		log.Printf("Applying SQL migration: %s (%s)", version, name)
+		content, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+
+		if len(content) > 0 {
+			// Some SQL files contain multiple statements (CREATE TABLE then CREATE INDEX).
+			// The MySQL driver disallows executing multiple statements in one Exec unless
+			// `multiStatements=true` is enabled in the DSN. To avoid changing DSN and
+			// improve portability, split the file by semicolons and execute each
+			// non-empty statement individually.
+			sqlText := string(content)
+			stmts := strings.Split(sqlText, ";")
+			for _, stmt := range stmts {
+				stmt = strings.TrimSpace(stmt)
+				if stmt == "" {
+					continue
+				}
+				if err := m.DB.Exec(stmt).Error; err != nil {
+					return err
+				}
+			}
+			log.Printf("Applied SQL migration: %s", base)
+		} else {
+			log.Printf("Empty SQL file, skipping execution: %s", base)
+		}
+
+		if err := migrator.RecordMigrationWithFile(version, name, base); err != nil {
+			return err
+		}
+		log.Printf("Recorded migration: %s (file=%s)", version, base)
 	}
 
 	return nil
@@ -120,7 +217,7 @@ func (m *Migration) ApplyRegistered() error {
 
 	regs := database.GetMigrations()
 	for _, reg := range regs {
-		applied, err := migrator.HasMigrationRecord(reg.Version)
+		applied, err := migrator.HasMigrationRecordVersionName(reg.Version, reg.Name)
 		if err != nil {
 			return err
 		}
@@ -168,7 +265,7 @@ func (m *Migration) RollbackRegistered(version string) error {
 		}
 	}
 
-	if err := migrator.RemoveMigrationRecord(target); err != nil {
+	if err := migrator.RemoveMigrationRecord(target, reg.Name); err != nil {
 		return err
 	}
 

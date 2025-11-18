@@ -3,6 +3,8 @@ package http
 import (
 	"net/http"
 	"study1/internal/core/config"
+	"study1/internal/core/database"
+	httpmw "study1/internal/core/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,17 +21,19 @@ type RouteRegistrar interface {
 	RegisterRoutes(router *gin.RouterGroup)
 }
 
-func NewServer(cfg *config.Config, modules ...RouteRegistrar) *Server {
+// NewServer creates a new HTTP server and registers provided modules. Accepts
+// a database handle so middleware (e.g., activity logging) can write logs.
+func NewServer(cfg *config.Config, db *database.DB, modules ...RouteRegistrar) *Server {
 	router := gin.Default()
 
-	// Middleware
-	router.Use(gin.Logger(), gin.Recovery())
+	// Middleware: include standard logger/recovery and activity DB logger
+	router.Use(gin.Logger(), gin.Recovery(), httpmw.ActivityLogger(db))
 
 	// Swagger
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// API routes
-	api := router.Group("/api/v1")
+	api := router.Group(cfg.Server.BasePath)
 	{
 		api.GET("/", apiRoot(cfg))
 		api.GET("/info", apiInfo(cfg))

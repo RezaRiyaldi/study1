@@ -8,12 +8,12 @@ import (
 
 // UserRepository defines the interface for user data operations.
 type UserRepository interface {
-	FindAll(params types.QueryParams) ([]User, *types.Meta, error)
-	FindByID(id uint) (*User, error)
+	FindManys(params types.QueryParams) ([]User, *types.Meta, error)
+	FindOnes(uuid string) (*User, error)
 	FindByEmail(email string) (*User, error)
-	Create(user *User) error
-	Update(user *User) error
-	Delete(id uint) error
+	CreateOnes(user *User) error
+	UpdateOnes(user *User) error
+	DeleteOnes(uuid string) error
 }
 
 // userRepository implements the UserRepository interface.
@@ -25,19 +25,19 @@ type userRepository struct {
 // NewUserRepository creates a new instance of UserRepository.
 func NewUserRepository(db *database.DB) UserRepository {
 	return &userRepository{
-		genericRepo: repository.NewGenericRepository[User](db),
+		genericRepo: repository.NewGenericRepositoryWithSoftDelete[User](db, true),
 		db:          db,
 	}
 }
 
 // FindAll retrieves all users with pagination and filtering.
-func (r *userRepository) FindAll(params types.QueryParams) ([]User, *types.Meta, error) {
-	return r.genericRepo.FindAll(params)
+func (r *userRepository) FindManys(params types.QueryParams) ([]User, *types.Meta, error) {
+	return r.genericRepo.FindManys(params)
 }
 
-// FindByID retrieves a user by their ID.
-func (r *userRepository) FindByID(id uint) (*User, error) {
-	return r.genericRepo.FindByID(id)
+// FindByUUID retrieves a user by their UUID using the generic repository.
+func (r *userRepository) FindOnes(uuid string) (*User, error) {
+	return r.genericRepo.FindOnes(uuid)
 }
 
 // FindByEmail retrieves a user by their email address.
@@ -51,16 +51,16 @@ func (r *userRepository) FindByEmail(email string) (*User, error) {
 }
 
 // Create adds a new user to the database.
-func (r *userRepository) Create(user *User) error {
-	return r.genericRepo.Create(user)
+func (r *userRepository) CreateOnes(user *User) error {
+	return r.genericRepo.CreateOnes(user)
 }
 
 // Update modifies an existing user in the database.
-func (r *userRepository) Update(user *User) error {
-	return r.genericRepo.Update(user)
+func (r *userRepository) UpdateOnes(user *User) error {
+	return r.genericRepo.UpdateOnes(user)
 }
 
-// Delete removes a user from the database by ID.
-func (r *userRepository) Delete(id uint) error {
-	return r.genericRepo.Delete(id)
+// DeleteOnes removes a user by their UUID using the generic repository.
+func (r *userRepository) DeleteOnes(uuid string) error {
+	return r.genericRepo.DeleteOnes(uuid)
 }

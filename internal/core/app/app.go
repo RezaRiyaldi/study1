@@ -4,6 +4,7 @@ import (
 	"study1/internal/core/config"
 	"study1/internal/core/database"
 	"study1/internal/core/http"
+	"study1/internal/modules/activity"
 	"study1/internal/modules/user"
 )
 
@@ -21,10 +22,10 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Initialize modules
 	userModule := user.NewUserModule(db)
-	// otherModule := other.NewOtherModule(db)
+	activityModule := activity.NewActivityModule(db)
 
-	// Pass semua modules ke server
-	server := http.NewServer(cfg, userModule) //, otherModule, anotherModule)
+	// Pass semua modules ke server (provide DB for middleware)
+	server := http.NewServer(cfg, db, userModule, activityModule) //, otherModule, anotherModule)
 
 	return &App{
 		config: cfg,

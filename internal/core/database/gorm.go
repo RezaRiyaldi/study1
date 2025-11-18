@@ -115,18 +115,34 @@ func (b *QueryBuilder[T]) applyFieldSelection() *QueryBuilder[T] {
 
 // toSnakeCase mengubah string CamelCase menjadi snake_case
 func toSnakeCase(s string) string {
-	var result []rune
-	for i, r := range s {
+	// Convert CamelCase to snake_case but treat consecutive uppercase letters
+	// (acronyms) as a single token. Examples:
+	//   ID -> id
+	//   UserID -> user_id
+	//   LatencyMs -> latency_ms
+	runes := []rune(s)
+	var b strings.Builder
+	for i, r := range runes {
 		if unicode.IsUpper(r) {
 			if i > 0 {
-				result = append(result, '_')
+				prev := runes[i-1]
+				// Add underscore when previous is lower/digit, or when previous
+				// is upper but next is lower (transition from acronym to word).
+				if unicode.IsLower(prev) || unicode.IsDigit(prev) {
+					b.WriteByte('_')
+				} else if i+1 < len(runes) {
+					next := runes[i+1]
+					if unicode.IsLower(next) {
+						b.WriteByte('_')
+					}
+				}
 			}
-			result = append(result, unicode.ToLower(r))
+			b.WriteRune(unicode.ToLower(r))
 		} else {
-			result = append(result, r)
+			b.WriteRune(r)
 		}
 	}
-	return string(result)
+	return b.String()
 }
 
 func (b *QueryBuilder[T]) detectSearchableFields() []string {

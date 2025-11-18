@@ -20,8 +20,9 @@ func NewMigrator(db *gorm.DB) *Migrator {
 // MigrationRecord represents a record in the migrations table.
 type MigrationRecord struct {
 	ID        uint      `gorm:"primaryKey"`
-	Version   string    `gorm:"uniqueIndex;size:64"`
-	Name      string    `gorm:"size:255"`
+	Version   string    `gorm:"size:64;uniqueIndex:idx_migrations_unique"`
+	Name      string    `gorm:"size:255;uniqueIndex:idx_migrations_unique"`
+	File      string    `gorm:"size:255;uniqueIndex:idx_migrations_unique"`
 	AppliedAt time.Time `gorm:"autoCreateTime"`
 }
 
@@ -37,7 +38,7 @@ func (m *Migrator) RecordMigration(version, name string) error {
 	}
 
 	var rec MigrationRecord
-	if err := m.db.Where("version = ?", version).First(&rec).Error; err == nil {
+	if err := m.db.Where("version = ? AND name = ?", version, name).First(&rec).Error; err == nil {
 		// already recorded
 		return nil
 	} else if err != gorm.ErrRecordNotFound {
@@ -47,6 +48,7 @@ func (m *Migrator) RecordMigration(version, name string) error {
 	rec = MigrationRecord{
 		Version:   version,
 		Name:      name,
+		File:      "",
 		AppliedAt: time.Now(),
 	}
 
@@ -71,13 +73,70 @@ func (m *Migrator) HasMigrationRecord(version string) (bool, error) {
 	return true, nil
 }
 
+// HasMigrationRecordVersionName checks if a migration with the given version and name exists.
+func (m *Migrator) HasMigrationRecordVersionName(version, name string) (bool, error) {
+	if err := m.ensureMigrationsTable(); err != nil {
+		return false, err
+	}
+	var rec MigrationRecord
+	if err := m.db.Where("version = ? AND name = ?", version, name).First(&rec).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// HasMigrationRecordWithFile checks if a migration with the given version, name and file exists.
+func (m *Migrator) HasMigrationRecordWithFile(version, name, file string) (bool, error) {
+	if err := m.ensureMigrationsTable(); err != nil {
+		return false, err
+	}
+	var rec MigrationRecord
+	if err := m.db.Where("version = ? AND name = ? AND file = ?", version, name, file).First(&rec).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // RemoveMigrationRecord deletes a migration record by version.
-func (m *Migrator) RemoveMigrationRecord(version string) error {
+func (m *Migrator) RemoveMigrationRecord(version, name string) error {
 	if err := m.ensureMigrationsTable(); err != nil {
 		return err
 	}
-	if err := m.db.Where("version = ?", version).Delete(&MigrationRecord{}).Error; err != nil {
+	if err := m.db.Where("version = ? AND name = ?", version, name).Delete(&MigrationRecord{}).Error; err != nil {
 		return err
+	}
+	return nil
+}
+
+// RecordMigrationWithFile records a migration including the originating file name.
+func (m *Migrator) RecordMigrationWithFile(version, name, file string) error {
+	if err := m.ensureMigrationsTable(); err != nil {
+		return fmt.Errorf("ensure migrations table: %w", err)
+	}
+
+	var rec MigrationRecord
+	if err := m.db.Where("version = ? AND name = ? AND file = ?", version, name, file).First(&rec).Error; err == nil {
+		// already recorded
+		return nil
+	} else if err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("check migration record: %w", err)
+	}
+
+	rec = MigrationRecord{
+		Version:   version,
+		Name:      name,
+		File:      file,
+		AppliedAt: time.Now(),
+	}
+
+	if err := m.db.Create(&rec).Error; err != nil {
+		return fmt.Errorf("create migration record: %w", err)
 	}
 	return nil
 }
