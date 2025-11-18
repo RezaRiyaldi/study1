@@ -10,10 +10,14 @@ type Config struct {
 }
 
 type ServerConfig struct {
+	Environtment string
 	Name         string
 	Version      string
+	Protocol     string
+	Host         string
 	Port         string
-	Environtment string
+	BasePath     string
+	URL          string
 }
 
 type DatabaseConfig struct {
@@ -27,10 +31,14 @@ type DatabaseConfig struct {
 func LoadConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
+			Environtment: getEnv("APP_ENVIRONMENT", "development"),
 			Name:         getEnv("APP_NAME", "Study1"),
 			Version:      getEnv("APP_VERSION", "1.0.0"),
-			Port:         getEnv("SERVER_PORT", "8080"),
-			Environtment: getEnv("SERVER_ENV", "development"),
+			Protocol:     getEnv("APP_PROTOCOL", "http"),
+			Host:         getEnv("APP_HOST", "localhost"),
+			Port:         getEnv("APP_PORT", "8080"),
+			BasePath:     getEnv("APP_BASE_PATH", "/api/v1/"),
+			URL:          getEnv("APP_URL", "http://localhost:8080/api/v1/"),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),

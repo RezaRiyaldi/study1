@@ -32,7 +32,7 @@ func NewServer(cfg *config.Config, modules ...RouteRegistrar) *Server {
 	api := router.Group("/api/v1")
 	{
 		api.GET("/", apiRoot(cfg))
-		api.GET("/app-information", apiAppInformation(cfg))
+		api.GET("/info", apiInfo(cfg))
 		api.GET("/health", apiHealth(cfg))
 
 		// Register semua modules
@@ -52,25 +52,27 @@ func (s *Server) GetRouter() *gin.Engine {
 	return s.router
 }
 
-// apiVersion returns a handler that reports the current API version.
-// This is used at runtime and for docs.
-// @Summary API Version
-// @Description Get API version information
+// @Summary API Information
+// @Description Get API Information
 // @Tags general
 // @Produce json
 // @Success 200 {object} map[string]string
-// @Router /app-information [get]
-func apiAppInformation(cfg *config.Config) gin.HandlerFunc {
+// @Router /info [get]
+func apiInfo(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
+			"env":       cfg.Server.Environtment,
 			"name":      cfg.Server.Name,
 			"version":   cfg.Server.Version,
-			"base_path": "/api/v1",
+			"protocol":  cfg.Server.Protocol,
+			"host":      cfg.Server.Host,
+			"base_path": cfg.Server.BasePath,
+			"port":      cfg.Server.Port,
+			"url":       cfg.Server.URL,
 		})
 	}
 }
 
-// apiRoot returns a handler for the root endpoint (used for docs and runtime).
 // @Summary Welcome message
 // @Description Get welcome message
 // @Tags general
@@ -85,7 +87,6 @@ func apiRoot(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// apiHealth returns a handler for the health endpoint (used for docs and runtime).
 // @Summary Health check
 // @Description Check API health status
 // @Tags general
