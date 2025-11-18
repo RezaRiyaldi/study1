@@ -21,6 +21,7 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
+	Driver   string
 	Host     string
 	Name     string
 	Port     string
@@ -41,6 +42,7 @@ func LoadConfig() *Config {
 			URL:          getEnv("APP_URL", "http://localhost:8080/api/v1/"),
 		},
 		Database: DatabaseConfig{
+			Driver:   getEnv("DB_DRIVER", "mysql"),
 			Host:     getEnv("DB_HOST", "localhost"),
 			Name:     getEnv("DB_NAME", "study1"),
 			Port:     getEnv("DB_PORT", "3306"),
@@ -58,6 +60,24 @@ func getEnv(key string, defaultVal string) string {
 	return defaultVal
 }
 
-func (dbCfg DatabaseConfig) GetDSNMySQL() string {
-	return dbCfg.User + ":" + dbCfg.Password + "@tcp(" + dbCfg.Host + ":" + dbCfg.Port + ")/" + dbCfg.Name + "?charset=utf8mb4&parseTime=True&loc=Asia%2FJakarta"
+func (dbCfg DatabaseConfig) GetDSN() string {
+	switch dbCfg.Driver {
+	case "mysql":
+		return dbCfg.User + ":" + dbCfg.Password + "@tcp(" + dbCfg.Host + ":" + dbCfg.Port + ")/" + dbCfg.Name + "?charset=utf8mb4&parseTime=True&loc=Asia%2FJakarta"
+	case "postgres":
+		return "host=" + dbCfg.Host + " port=" + dbCfg.Port + " user=" + dbCfg.User + " password=" + dbCfg.Password + " dbname=" + dbCfg.Name + " sslmode=disable"
+	default:
+		return ""
+	}
+}
+
+func (dbCfg DatabaseConfig) GetDSNNoDB() string {
+	switch dbCfg.Driver {
+	case "mysql":
+		return dbCfg.User + ":" + dbCfg.Password + "@tcp(" + dbCfg.Host + ":" + dbCfg.Port + ")/?charset=utf8mb4&parseTime=True&loc=Asia%2FJakarta"
+	case "postgres":
+		return "host=" + dbCfg.Host + " port=" + dbCfg.Port + " user=" + dbCfg.User + " password=" + dbCfg.Password + " sslmode=disable"
+	default:
+		return ""
+	}
 }
